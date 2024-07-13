@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deploy Smart Contract with MetaMask</title>
+    <style>
+        /* CSS untuk menempatkan konten di tengah halaman */
+        body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center; /* Menengahkan teks secara horizontal */
+            position: relative; /* Memastikan posisi relatif untuk notifikasi */
+        }
+
+        .container {
+            max-width: 600px; /* Lebar maksimum konten */
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            z-index: 1; /* Mengatur kedalaman tumpukan */
+            position: relative; /* Memastikan posisi relatif untuk konten */
+        }
+
+        /* Gaya asli Anda */
+        .popup-notification {
+            position: absolute; /* Mengatur notifikasi di posisi absolut */
+            top: 10px; /* Jarak dari atas */
+            left: 50%; /* Posisi tengah horizontal */
+            transform: translateX(-50%); /* Posisi horizontal di tengah */
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            background-color: #f8d7da; /* Warna notifikasi */
+            color: #721c24; /* Warna teks notifikasi */
+            display: none; /* Mulai dengan display none */
+            z-index: 2; /* Menempatkan di atas konten */
+            width: 100%; /* Lebar notifikasi */
+            text-align: center; /* Menengahkan teks notifikasi */
+        }
+
+        .success {
+            background-color: #d4edda; /* Warna notifikasi sukses */
+            color: #155724; /* Warna teks notifikasi sukses */
+        }
+
+        .error {
+            background-color: #f8d7da; /* Warna notifikasi gagal */
+            color: #721c24; /* Warna teks notifikasi gagal */
+        }
+
+        .notification-container {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            z-index: 3; /* Mengatur notifikasi di atas semua elemen */
+        }
+
+        .connected-account {
+            font-size: 12px;
+            color: #007bff; /* Warna teks biru */
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 style="text-align: center;">DEPLOY SMART CONTRACT</h2>
+        <button id="connectButton" onclick="connect()">Connect to MetaMask</button><br>
+        <div id="connectedAccount" class="connected-account"></div><br>
+        <div style="font-size: 12px; color: #666;">Silahkan cek terlebih dahulu jaringan anda, gunakan wallet testnet!</div>
+
+        <form id="deployForm" style="display: none;">
+            <br><input type="submit" value="Deploy Contract">
+        </form>
+    </div>
+
+    <!-- Notifikasi di luar kontainer utama -->
+    <div class="notification-container">
+        <div id="status" class="popup-notification"></div>
+    </div>
+
+    <script src="https://cdn.ethers.io/lib/ethers-5.0.umd.min.js"></script>
+    <script>
+        async function connect() {
+            try {
+                // Request access to MetaMask accounts
+                const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+                const account = accounts[0]; // Get the first account
+                const chainId = await ethereum.request({ method: 'eth_chainId' });
+                const networkName = getNetworkName(chainId);
+
+                // Get ETH balance
+                const provider = new ethers.providers.Web3Provider(window.ethereum);
+                const balance = await provider.getBalance(account);
+                const ethBalance = ethers.utils.formatEther(balance); // Convert from Wei to ETH
+
+                // Update connected account information
+                document.getElementById('connectedAccount').innerHTML = `Address: <br>${account}<br>Anda terhubung di jaringan: ${networkName}, Saldo ETH: ${ethBalance}`;
+
+                showNotification(`You are connected to network: ${networkName}`, 'success');
+
+                // Change button text to "Connected"
+                document.getElementById('connectButton').textContent = 'Connected';
+
+                // Show the deployment form
+                document.getElementById('deployForm').style.display = 'block';
+            } catch (error) {
+                console.error(error);
+                showNotification('Failed to connect', 'error');
+            }
+        }
+
+        document.getElementById('deployForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const abiPath = './SimpleStorage_abi.json'; // Path to your ABI file
+            const bytecodePath = './SimpleStorage_bytecode.txt'; // Path to your bytecode file
+
+            const provider = new ethers.providers.Web3Provider(window.ethereum);
+            const signer = provider.getSigner();
+            const account = await signer.getAddress();
+
+            async function deployContract(signer, abiPath, bytecodePath) {
+                const abi = JSON.parse(await fetch(abiPath).then(res => res.text()));
+                const bytecode = await fetch(bytecodePath).then(res => res.text());
+
+                const factory = new ethers.ContractFactory(abi, bytecode, signer);
+
+                console.log('Deploying contract...');
+                const contract = await factory.deploy();
+
+                await contract.deployed();
+
+                console.log(`Contract deployed at address: ${contract.address}`);
+                showNotification('Contract deployed successfully', 'success');
+            }
+
+            try {
+                await deployContract(signer, abiPath, bytecodePath);
+            } catch (error) {
+                console.error(error);
+                showNotification('Failed to deploy contract', 'error');
+            }
+        });
+
+        function showNotification(message, type) {
+            const notification = document.getElementById('status');
+            notification.textContent = message;
+            notification.className = `popup-notification ${type}`;
+            notification.style.display = 'block';
+
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000); // Hide notification after 3 seconds
+        }
+
+        function getNetworkName(chainId) {
+            switch (chainId) {
+                case '0x1':
+                    return 'Mainnet';
+                case '0x3':
+                    return 'Ropsten Testnet';
+                case '0x4':
+                    return 'Rinkeby Testnet';
+                case '0x5':
+                    return 'Goerli Testnet';
+                case '0x2a':
+                    return 'Kovan Testnet';
+                default:
+                    return `Chain ID: ${chainId}`;
+            }
+        }
+    </script>
+</body>
+</html>
